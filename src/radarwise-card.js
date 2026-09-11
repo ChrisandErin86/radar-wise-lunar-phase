@@ -3,7 +3,7 @@
  * Home Assistant weather dashboard card with forecasts and optional radar.
  */
 
-const CARD_VERSION = "0.8.23";
+const CARD_VERSION = "0.9.0-cm1";
 const FORECAST_REFRESH_MS = 15 * 60 * 1000;
 const ENVIRONMENT_REFRESH_MS = 60 * 60 * 1000;
 const CARD_TYPES = ["radarwise-card", "radar-wise-card", "weatherwise-card", "weather-wise-card"];
@@ -258,6 +258,17 @@ const RADARWISE_TEXT = {
     grassPollen: "Grass Pollen",
     weedPollen: "Weed Pollen",
     moldPollen: "Mold",
+    moonAge: "Moon Age",
+    dayUnit: "day",
+    daysUnit: "days",
+    moonNew: "New Moon",
+    moonWaxingCrescent: "Waxing Crescent",
+    moonFirstQuarter: "First Quarter",
+    moonWaxingGibbous: "Waxing Gibbous",
+    moonFull: "Full Moon",
+    moonWaningGibbous: "Waning Gibbous",
+    moonLastQuarter: "Last Quarter",
+    moonWaningCrescent: "Waning Crescent",
     good: "Good",
     low: "Low",
     moderate: "Moderate",
@@ -528,8 +539,7 @@ const RADARWISE_TEXT = {
     pauseRadarLoop: "Radarschleife pausieren",
     playRadarLoop: "Radarschleife starten",
     weatherAlert: "Wetterwarnung",
-    activeWeatherAlert: "aktive Wetterwarnung",
-    nwsAlertTap: "NWS-Warnung - für Details antippen",
+    activeWeatherAlert: "aktive Wetterwarnung",    nwsAlertTap: "NWS-Warnung - für Details antippen",
     nwsAlertsTap: "NWS-Warnungen - für Details antippen",
     severity: "Schweregrad",
     unknown: "Unbekannt",
@@ -801,7 +811,7 @@ function isRadarWiseWindDirectionEntity(entityId, state) {
     || haystack.includes("wind_dir")
     || haystack.includes("winddirection")
     || deviceClass === "wind_direction";
-  const degreeish = unit.includes("deg") || unit.includes("\u00b0") || unit === "degree" || unit === "degrees";
+  const degreeish = unit.includes("deg") || unit.includes("°") || unit === "degree" || unit === "degrees";
   return (windish && (directionish || degreeish)) || deviceClass === "wind_direction";
 }
 
@@ -895,6 +905,7 @@ class RadarWiseCard extends HTMLElement {
       show_sunset: true,
       show_environment: true,
       show_custom_sensors: true,
+      show_moon: false,
       show_radar: true,
       show_map_controls: true,
       radar_controls: true,
@@ -1065,8 +1076,7 @@ class RadarWiseCard extends HTMLElement {
     this._environmentTimer = window.setInterval(() => this._refreshEnvironmentIfStale(true), ENVIRONMENT_REFRESH_MS);
   }
 
-  _resetEnvironmentData() {
-    this._environmentData = null;
+  _resetEnvironmentData() {    this._environmentData = null;
     this._environmentLastLoad = 0;
     this._environmentKey = "";
     window.clearInterval(this._environmentTimer);
@@ -1314,6 +1324,7 @@ class RadarWiseCard extends HTMLElement {
       show_sunrise: config.show_sunrise !== false,
       show_sunset: config.show_sunset !== false,
       show_environment: config.show_environment !== false,
+      show_moon: config.show_moon === true,
       show_radar: config.show_radar !== false,
       show_map_controls: config.show_map_controls !== false,
       radar_controls: config.radar_controls !== false,
@@ -1498,8 +1509,7 @@ class RadarWiseCard extends HTMLElement {
   }
 
   _forecastTypesToLoad(entityId) {
-    const mode = this._config.forecast_mode || "auto";
-    const capabilities = this._forecastCapabilities(entityId);
+    const mode = this._config.forecast_mode || "auto";    const capabilities = this._forecastCapabilities(entityId);
     let types;
 
     if (mode === "daily") {
@@ -1585,7 +1595,7 @@ class RadarWiseCard extends HTMLElement {
       timeline: this._config.show_timeline !== false,
       forecast: this._config.show_forecast !== false,
       forecastSummary: this._config.show_forecast_summary !== false,
-      environment: this._config.show_environment !== false,
+      environment: this._config.show_environment !== false || this._config.show_moon === true,
       radar: this._config.show_radar !== false && radarAllowed
     };
     const presets = {
@@ -1927,8 +1937,7 @@ class RadarWiseCard extends HTMLElement {
         native_humidity: data.attrs?.native_humidity
       })],
       ["Weather dew point attrs", debugValue({
-        dew_point: data.attrs?.dew_point,
-        dewpoint: data.attrs?.dewpoint,
+        dew_point: data.attrs?.dew_point,        dewpoint: data.attrs?.dewpoint,
         dewPoint: data.attrs?.dewPoint,
         native_dew_point: data.attrs?.native_dew_point,
         dew_point_temperature: data.attrs?.dew_point_temperature
@@ -2309,12 +2318,65 @@ class RadarWiseCard extends HTMLElement {
     return `<svg viewBox="0 0 24 24" fill="none"><path d="M5 17.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 14.5c1.6-4.1 3.3-6.1 5-6.1s3.4 2 5 6.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8.4" r="2.5" fill="#65b8df"/><path d="M12 12.5v3.5" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/></svg>`;
   }
 
+  _moonPhase(date) {
+    // Synodic-month approximation anchored to a recent verified new moon
+    // (2026-09-11 03:27 UTC) to keep drift near zero for the next several years;
+    // re-anchor to a more recent new moon if this ever needs revisiting.
+    const KNOWN_NEW_MOON_MS = Date.UTC(2026, 8, 11, 3, 27, 0);
+    const SYNODIC_DAYS = 29.530588853;
+    const SYNODIC_MS = SYNODIC_DAYS * 86400000;
+    const diff = date.getTime() - KNOWN_NEW_MOON_MS;
+    let fraction = (diff % SYNODIC_MS) / SYNODIC_MS;
+    if (fraction < 0) fraction += 1;
+    const ageDays = fraction * SYNODIC_DAYS;
+    const illumination = (1 - Math.cos(fraction * 2 * Math.PI)) / 2;
+    const names = [
+      this._t("moonNew"), this._t("moonWaxingCrescent"), this._t("moonFirstQuarter"), this._t("moonWaxingGibbous"),
+      this._t("moonFull"), this._t("moonWaningGibbous"), this._t("moonLastQuarter"), this._t("moonWaningCrescent")
+    ];
+    const name = names[Math.round(fraction * 8) % 8];    return { fraction, ageDays, illumination, name };
+  }
+
+  _moonTile() {
+    if (this._config.show_moon !== true) return null;
+    const { fraction, ageDays, name } = this._moonPhase(new Date());
+    const wholeDays = Math.round(ageDays) % 30;
+    return {
+      kind: "moon",
+      label: this._t("moonAge"),
+      value: `${wholeDays} ${wholeDays === 1 ? this._t("dayUnit") : this._t("daysUnit")}`,
+      note: name,
+      level: "neutral",
+      fraction
+    };
+  }
+
+  _moonPhaseIcon(fraction) {
+    // Two overlapping-circle technique: a dark "shadow" disc slides across the lit
+    // disc. Waxing (fraction<0.5) uncovers light from the right; waning re-covers
+    // it from the right, leaving the lit sliver on the left — matches how the Moon
+    // appears to a Northern Hemisphere observer.
+    const t = fraction <= 0.5 ? fraction / 0.5 : (fraction - 0.5) / 0.5;
+    const offsetPercent = fraction <= 0.5 ? -100 * t : 100 * (1 - t);
+    return `
+      <div class="moon-mini" aria-hidden="true">
+        <div class="moon-mini-disc">
+          <div class="moon-mini-shadow" style="transform:translateX(${offsetPercent}%)"></div>
+        </div>
+      </div>
+    `;
+  }
+
   _renderEnvironmentTiles() {
-    if (this._config.show_environment === false || this._config.environment_source === "disabled") return "";
-    const tiles = [this._airQualityTile(), this._pollenTile()].filter(Boolean);
+    const envBlocked = this._config.show_environment === false || this._config.environment_source === "disabled";
+    const tiles = [
+      ...(envBlocked ? [] : [this._airQualityTile(), this._pollenTile()]),
+      this._moonTile()
+    ].filter(Boolean);
+    if (!tiles.length) return "";
     return tiles.map((tile) => `
       <div class="env-tile env-${_wwEscape(tile.level || "neutral")}">
-        <div class="env-ico" aria-hidden="true">${this._environmentIcon(tile.kind)}</div>
+        <div class="env-ico" aria-hidden="true">${this._environmentIcon(tile.kind, tile.fraction)}</div>
         <div class="env-copy">
           <div class="env-lbl">${_wwEscape(tile.label)}</div>
           <div class="env-val">${_wwEscape(tile.value)}</div>
@@ -2490,7 +2552,10 @@ class RadarWiseCard extends HTMLElement {
     return { key: "unknown", level: "neutral", rank: 0 };
   }
 
-  _environmentIcon(kind) {
+  _environmentIcon(kind, fraction) {
+    if (kind === "moon") {
+      return this._moonPhaseIcon(Number.isFinite(fraction) ? fraction : 0);
+    }
     if (kind === "aqi") {
       return `<svg viewBox="0 0 24 24" fill="none"><path d="M4 14c2.6-3.2 5.4-3.2 8 0s5.4 3.2 8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 9c2.3-2.6 4.7-2.6 7 0s4.7 2.6 7 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".65"/><circle cx="7" cy="18" r="1.6" fill="#65b8df"/><circle cx="13" cy="18" r="1.6" fill="#e8b84b"/><circle cx="19" cy="18" r="1.6" fill="#f97316"/></svg>`;
     }
@@ -3927,6 +3992,9 @@ class RadarWiseCard extends HTMLElement {
       .env-tile{display:grid;grid-template-columns:25px minmax(0,1fr);align-items:center;gap:8px;min-width:0;min-height:56px;padding:8px 9px;border-radius:12px;background:rgba(255,255,255,.25);border:1px solid var(--ww-line);box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
       .env-ico{width:25px;height:25px;color:var(--ww-wave);display:grid;place-items:center}
       .env-ico svg{width:25px;height:25px}
+      .moon-mini{width:22px;height:22px;display:grid;place-items:center}
+      .moon-mini-disc{position:relative;width:20px;height:20px;border-radius:50%;overflow:hidden;background:#e2e8f0;box-shadow:0 0 4px rgba(226,232,240,.55)}
+      .moon-mini-shadow{position:absolute;inset:0;border-radius:50%;background:#0f172a}
       .env-copy{min-width:0}
       .env-lbl{font-size:10px;line-height:1.05;color:var(--ww-muted);font-weight:900;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .env-val{font-size:16px;line-height:1.05;color:var(--ww-text);font-weight:950;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -4255,7 +4323,7 @@ class RadarWiseCardEditor extends HTMLElement {
 
   _setValue(key, value) {
     const numberKeys = ["latitude", "longitude", "hourly_count", "forecast_count", "card_height", "card_max_height", "radar_zoom", "radar_speed"];
-    const booleanKeys = ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "timeline_autoscroll"];
+    const booleanKeys = ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "show_moon", "timeline_autoscroll"];
     let nextValue = value;
     if (numberKeys.includes(key)) nextValue = value === "" ? undefined : Number(value);
     if (booleanKeys.includes(key)) nextValue = Boolean(value);
@@ -4513,6 +4581,8 @@ class RadarWiseCardEditor extends HTMLElement {
             </label>
           </div>
           <label class="check" style="margin-top:10px"><input id="show_environment" type="checkbox" ${config.show_environment === false ? "" : "checked"}> Show AQI / pollen beside the clock</label>
+          <label class="check" style="margin-top:6px"><input id="show_moon" type="checkbox" ${config.show_moon === true ? "checked" : ""}> Show moon phase beside the clock</label>
+          <div class="hint">Adds a moon-phase disc and current moon age to that row, calculated locally (no entity needed) — works even with AQI/pollen turned off.</div>
           <div class="hint">Use Home Assistant sensors for fully entity-driven data, or Open-Meteo for no-key AQI, UV index, and pollen using the radar latitude/longitude. Open-Meteo does not provide mold; mold remains sensor-only.</div>
         </div>
         <div class="section">
@@ -4820,7 +4890,7 @@ class RadarWiseCardEditor extends HTMLElement {
     ["entity", "temperature_entity", "humidity_entity", "dew_point_entity", "wind_speed_entity", "wind_direction_entity", "air_quality_entity", "uv_index_entity", "pollen_entity", "tree_pollen_entity", "grass_pollen_entity", "weed_pollen_entity", "mold_pollen_entity", "environment_source", "country", "radar_provider", "radar_style", "radar_basemap", "radar_timeline", "title", "units", "theme_mode", "language", "time_format", "time_zone_mode", "time_zone", "font_family", "density", "latitude", "longitude", "hourly_count", "forecast_count", "forecast_mode", "card_height", "card_max_height", "radar_zoom", "radar_speed"].forEach((id) => {
       this.shadowRoot.getElementById(id)?.addEventListener("change", (event) => this._setValue(id, event.target.value));
     });
-    ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "timeline_autoscroll"].forEach((id) => {
+    ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "show_moon", "timeline_autoscroll"].forEach((id) => {
       this.shadowRoot.getElementById(id)?.addEventListener("change", (event) => this._setValue(id, event.target.checked));
     });
     this.shadowRoot.querySelectorAll("[data-custom-sensor-index][data-custom-sensor-field]").forEach((input) => {
