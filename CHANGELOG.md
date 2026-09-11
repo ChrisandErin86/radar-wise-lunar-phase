@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0-cm1 (personal fork — christophermessmer86)
+
+### Added
+
+- Added an optional moon-phase tile (`show_moon: true`) that renders in the same row as the AQI/pollen tiles beside the clock — a small CSS-drawn phase disc plus "Moon Age" in days and the phase name (New/Waxing Crescent/First Quarter/.../Waning Crescent). Calculated locally from a synodic-month approximation anchored to the September 11, 2026 new moon (03:27 UTC); no entity or extra integration required. Shows up even when AQI/pollen are turned off.
+- This tile independently unlocks the clock-row content when `show_environment` is off, so `show_moon: true` alone is enough to reveal the row.
+
 ## 0.8.23
 
 ### Added
