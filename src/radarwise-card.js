@@ -6,7 +6,7 @@
 const CARD_VERSION = "0.9.0-cm1";
 const FORECAST_REFRESH_MS = 15 * 60 * 1000;
 const ENVIRONMENT_REFRESH_MS = 60 * 60 * 1000;
-const CARD_TYPES = ["radarwise-card", "radar-wise-card", "weatherwise-card", "weather-wise-card"];
+const CARD_TYPES = ["radarwise-lunar-card", "radar-wise-lunar-card", "weatherwise-lunar-card", "weather-wise-lunar-card"];
 const NOAA_RADAR_WMS = "https://opengeo.ncep.noaa.gov/geoserver/wms";
 
 const RADARWISE_COUNTRIES = {
@@ -927,7 +927,7 @@ class RadarWiseCard extends HTMLElement {
   }
 
   static getConfigElement() {
-    return document.createElement("radarwise-card-editor");
+    return document.createElement("radarwise-lunar-card-editor");
   }
 
   constructor() {
@@ -4984,17 +4984,15 @@ if (!customElements.get(CARD_TYPES[0])) customElements.define(CARD_TYPES[0], Rad
 if (!customElements.get(CARD_TYPES[1])) customElements.define(CARD_TYPES[1], RadarWiseDashedCard);
 if (!customElements.get(CARD_TYPES[2])) customElements.define(CARD_TYPES[2], RadarWiseLegacyCard);
 if (!customElements.get(CARD_TYPES[3])) customElements.define(CARD_TYPES[3], RadarWiseLegacyDashedCard);
-if (!customElements.get("radarwise-card-editor")) customElements.define("radarwise-card-editor", RadarWiseCardEditor);
-if (!customElements.get("radar-wise-card-editor")) customElements.define("radar-wise-card-editor", RadarWiseDashedCardEditor);
-if (!customElements.get("weatherwise-card-editor")) customElements.define("weatherwise-card-editor", RadarWiseLegacyCardEditor);
-if (!customElements.get("weather-wise-card-editor")) customElements.define("weather-wise-card-editor", RadarWiseLegacyDashedCardEditor);
-
-window.customCards = window.customCards || [];
+if (!customElements.get("radarwise-lunar-card-editor")) customElements.define("radarwise-lunar-card-editor", RadarWiseCardEditor);
+if (!customElements.get("radar-wise-lunar-card-editor")) customElements.define("radar-wise-lunar-card-editor", RadarWiseDashedCardEditor);
+if (!customElements.get("weatherwise-lunar-card-editor")) customElements.define("weatherwise-lunar-card-editor", RadarWiseLegacyCardEditor);
+if (!customElements.get("weather-wise-lunar-card-editor")) customElements.define("weather-wise-lunar-card-editor", RadarWiseLegacyDashedCardEditor);
 window.customCards.push({
-  type: "radarwise-card",
-  name: "RadarWise Weather",
+  type: "radarwise-lunar-card",
+  name: "RadarWise Weather (Lunar Test)",
   description: "Weather dashboard card with forecasts, theme support, and optional radar.",
-  documentationURL: "https://github.com/TheWillMiller/radar-wise",
+  documentationURL: "https://github.com/ChrisandErin86/radar-wise-lunar-phase",
   preview: true
 });
 
