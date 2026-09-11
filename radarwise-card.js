@@ -9583,7 +9583,7 @@ var require_leaflet_src = __commonJS({
 });
 
 // src/radarwise-card.js
-var CARD_VERSION = "0.8.23";
+var CARD_VERSION = "0.9.0-cm1";
 var FORECAST_REFRESH_MS = 15 * 60 * 1e3;
 var ENVIRONMENT_REFRESH_MS = 60 * 60 * 1e3;
 var CARD_TYPES = ["radarwise-card", "radar-wise-card", "weatherwise-card", "weather-wise-card"];
@@ -9818,6 +9818,17 @@ var RADARWISE_TEXT = {
     grassPollen: "Grass Pollen",
     weedPollen: "Weed Pollen",
     moldPollen: "Mold",
+    moonAge: "Moon Age",
+    dayUnit: "day",
+    daysUnit: "days",
+    moonNew: "New Moon",
+    moonWaxingCrescent: "Waxing Crescent",
+    moonFirstQuarter: "First Quarter",
+    moonWaxingGibbous: "Waxing Gibbous",
+    moonFull: "Full Moon",
+    moonWaningGibbous: "Waning Gibbous",
+    moonLastQuarter: "Last Quarter",
+    moonWaningCrescent: "Waning Crescent",
     good: "Good",
     low: "Low",
     moderate: "Moderate",
@@ -10089,8 +10100,7 @@ var RADARWISE_TEXT = {
     playRadarLoop: "Radarschleife starten",
     weatherAlert: "Wetterwarnung",
     activeWeatherAlert: "aktive Wetterwarnung",
-    nwsAlertTap: "NWS-Warnung - f\xFCr Details antippen",
-    nwsAlertsTap: "NWS-Warnungen - f\xFCr Details antippen",
+    nwsAlertTap: "NWS-Warnung - f\xFCr Details antippen",    nwsAlertsTap: "NWS-Warnungen - f\xFCr Details antippen",
     severity: "Schweregrad",
     unknown: "Unbekannt",
     forecastIntro: "Vorhersage",
@@ -10419,6 +10429,7 @@ var RadarWiseCard = class extends HTMLElement {
       show_sunset: true,
       show_environment: true,
       show_custom_sensors: true,
+      show_moon: false,
       show_radar: true,
       show_map_controls: true,
       radar_controls: true,
@@ -10568,8 +10579,7 @@ var RadarWiseCard = class extends HTMLElement {
     this._environmentKey = "";
     window.clearInterval(this._environmentTimer);
     this._environmentTimer = null;
-  }
-  _refreshEnvironmentIfStale(force = false) {
+  }  _refreshEnvironmentIfStale(force = false) {
     if (!this._environmentEnabled()) return;
     const { lat, lon } = this._latLon();
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
@@ -10798,6 +10808,7 @@ var RadarWiseCard = class extends HTMLElement {
       show_sunrise: config.show_sunrise !== false,
       show_sunset: config.show_sunset !== false,
       show_environment: config.show_environment !== false,
+      show_moon: config.show_moon === true,
       show_radar: config.show_radar !== false,
       show_map_controls: config.show_map_controls !== false,
       radar_controls: config.radar_controls !== false,
@@ -10982,8 +10993,7 @@ var RadarWiseCard = class extends HTMLElement {
       types = ["hourly", "daily"];
       if (capabilities && !capabilities.daily && capabilities.twice_daily) types = ["hourly", "twice_daily"];
     } else if (mode === "twice_daily") {
-      types = ["hourly", "twice_daily"];
-      if (capabilities && !capabilities.twice_daily && capabilities.daily) types = ["hourly", "daily"];
+      types = ["hourly", "twice_daily"];      if (capabilities && !capabilities.twice_daily && capabilities.daily) types = ["hourly", "daily"];
     } else {
       types = RADARWISE_FORECAST_TYPES.slice();
     }
@@ -11052,7 +11062,7 @@ var RadarWiseCard = class extends HTMLElement {
       timeline: this._config.show_timeline !== false,
       forecast: this._config.show_forecast !== false,
       forecastSummary: this._config.show_forecast_summary !== false,
-      environment: this._config.show_environment !== false,
+      environment: this._config.show_environment !== false || this._config.show_moon === true,
       radar: this._config.show_radar !== false && radarAllowed
     };
     const presets = {
@@ -11377,8 +11387,7 @@ var RadarWiseCard = class extends HTMLElement {
       ["Weather wind attrs", debugValue({
         wind_speed: data.attrs?.wind_speed,
         wind_speed_unit: data.attrs?.wind_speed_unit,
-        wind_bearing: data.attrs?.wind_bearing,
-        wind_direction: data.attrs?.wind_direction,
+        wind_bearing: data.attrs?.wind_bearing,        wind_direction: data.attrs?.wind_direction,
         windDirection: data.attrs?.windDirection
       })],
       ["Air quality entity", this._config.air_quality_entity || "none"],
@@ -11710,12 +11719,56 @@ var RadarWiseCard = class extends HTMLElement {
     }
     return `<svg viewBox="0 0 24 24" fill="none"><path d="M5 17.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 14.5c1.6-4.1 3.3-6.1 5-6.1s3.4 2 5 6.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8.4" r="2.5" fill="#65b8df"/><path d="M12 12.5v3.5" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/></svg>`;
   }
+  _moonPhase(date) {
+    const KNOWN_NEW_MOON_MS = Date.UTC(2026, 8, 11, 3, 27, 0);
+    const SYNODIC_DAYS = 29.530588853;
+    const SYNODIC_MS = SYNODIC_DAYS * 86400000;
+    const diff = date.getTime() - KNOWN_NEW_MOON_MS;
+    let fraction = diff % SYNODIC_MS / SYNODIC_MS;
+    if (fraction < 0) fraction += 1;
+    const ageDays = fraction * SYNODIC_DAYS;
+    const illumination = (1 - Math.cos(fraction * 2 * Math.PI)) / 2;
+    const names = [
+      this._t("moonNew"), this._t("moonWaxingCrescent"), this._t("moonFirstQuarter"), this._t("moonWaxingGibbous"),
+      this._t("moonFull"), this._t("moonWaningGibbous"), this._t("moonLastQuarter"), this._t("moonWaningCrescent")
+    ];
+    const name = names[Math.round(fraction * 8) % 8];
+    return { fraction, ageDays, illumination, name };
+  }
+  _moonTile() {
+    if (this._config.show_moon !== true) return null;
+    const { fraction, ageDays, name } = this._moonPhase(new Date());
+    const wholeDays = Math.round(ageDays) % 30;
+    return {
+      kind: "moon",
+      label: this._t("moonAge"),
+      value: `${wholeDays} ${wholeDays === 1 ? this._t("dayUnit") : this._t("daysUnit")}`,
+      note: name,
+      level: "neutral",
+      fraction
+    };
+  }
+  _moonPhaseIcon(fraction) {
+    const t = fraction <= 0.5 ? fraction / 0.5 : (fraction - 0.5) / 0.5;
+    const offsetPercent = fraction <= 0.5 ? -100 * t : 100 * (1 - t);
+    return `
+      <div class="moon-mini" aria-hidden="true">
+        <div class="moon-mini-disc">
+          <div class="moon-mini-shadow" style="transform:translateX(${offsetPercent}%)"></div>
+        </div>
+      </div>
+    `;
+  }
   _renderEnvironmentTiles() {
-    if (this._config.show_environment === false || this._config.environment_source === "disabled") return "";
-    const tiles = [this._airQualityTile(), this._pollenTile()].filter(Boolean);
+    const envBlocked = this._config.show_environment === false || this._config.environment_source === "disabled";
+    const tiles = [
+      ...envBlocked ? [] : [this._airQualityTile(), this._pollenTile()],
+      this._moonTile()
+    ].filter(Boolean);
+    if (!tiles.length) return "";
     return tiles.map((tile) => `
       <div class="env-tile env-${_wwEscape(tile.level || "neutral")}">
-        <div class="env-ico" aria-hidden="true">${this._environmentIcon(tile.kind)}</div>
+        <div class="env-ico" aria-hidden="true">${this._environmentIcon(tile.kind, tile.fraction)}</div>
         <div class="env-copy">
           <div class="env-lbl">${_wwEscape(tile.label)}</div>
           <div class="env-val">${_wwEscape(tile.value)}</div>
@@ -11869,7 +11922,10 @@ var RadarWiseCard = class extends HTMLElement {
     if (raw.includes("low")) return { key: "low", level: "good", rank: 1 };
     return { key: "unknown", level: "neutral", rank: 0 };
   }
-  _environmentIcon(kind) {
+  _environmentIcon(kind, fraction) {
+    if (kind === "moon") {
+      return this._moonPhaseIcon(Number.isFinite(fraction) ? fraction : 0);
+    }
     if (kind === "aqi") {
       return `<svg viewBox="0 0 24 24" fill="none"><path d="M4 14c2.6-3.2 5.4-3.2 8 0s5.4 3.2 8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 9c2.3-2.6 4.7-2.6 7 0s4.7 2.6 7 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".65"/><circle cx="7" cy="18" r="1.6" fill="#65b8df"/><circle cx="13" cy="18" r="1.6" fill="#e8b84b"/><circle cx="19" cy="18" r="1.6" fill="#f97316"/></svg>`;
     }
@@ -12142,8 +12198,7 @@ var RadarWiseCard = class extends HTMLElement {
         time: new Date(frame.time * 1e3),
         layer: window.L.tileLayer(`${host}${frame.path}/256/{z}/{x}/{y}/${this._rainViewerColor()}/1_1.png`, {
           opacity: index === list.length - 1 ? this._radarOpacity() : 0,
-          zIndex: 20,
-          maxNativeZoom: RAINVIEWER_MAX_NATIVE_ZOOM,
+          zIndex: 20,          maxNativeZoom: RAINVIEWER_MAX_NATIVE_ZOOM,
           maxZoom: RAINVIEWER_MAX_DISPLAY_ZOOM,
           attribution: "Radar &copy; RainViewer"
         })
@@ -12612,8 +12667,7 @@ var RadarWiseCard = class extends HTMLElement {
     }).addTo(this._radarMap);
   }
   _basemap(kind = this._config.radar_basemap) {
-    const url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const options = {
+    const url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";    const options = {
       maxZoom: 19,
       crossOrigin: true,
       // Home Assistant sends `Referrer-Policy: no-referrer`, while the OSM
@@ -13040,8 +13094,7 @@ var RadarWiseCard = class extends HTMLElement {
     } catch (err) {
       return void 0;
     }
-  }
-  _timeZoneOptions(options = {}) {
+  }  _timeZoneOptions(options = {}) {
     const timeZone = this._resolvedTimeZone();
     return timeZone ? { ...options, timeZone } : options;
   }
@@ -13204,6 +13257,9 @@ var RadarWiseCard = class extends HTMLElement {
       .env-tile{display:grid;grid-template-columns:25px minmax(0,1fr);align-items:center;gap:8px;min-width:0;min-height:56px;padding:8px 9px;border-radius:12px;background:rgba(255,255,255,.25);border:1px solid var(--ww-line);box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
       .env-ico{width:25px;height:25px;color:var(--ww-wave);display:grid;place-items:center}
       .env-ico svg{width:25px;height:25px}
+      .moon-mini{width:22px;height:22px;display:grid;place-items:center}
+      .moon-mini-disc{position:relative;width:20px;height:20px;border-radius:50%;overflow:hidden;background:#e2e8f0;box-shadow:0 0 4px rgba(226,232,240,.55)}
+      .moon-mini-shadow{position:absolute;inset:0;border-radius:50%;background:#0f172a}
       .env-copy{min-width:0}
       .env-lbl{font-size:10px;line-height:1.05;color:var(--ww-muted);font-weight:900;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .env-val{font-size:16px;line-height:1.05;color:var(--ww-text);font-weight:950;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -13218,8 +13274,7 @@ var RadarWiseCard = class extends HTMLElement {
       .forecast-summary:hover .forecast-summary-text{animation-play-state:paused}
       .section-title,.current-label{font-size:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--ww-muted);font-weight:850;white-space:nowrap}
       .hourly-left{display:flex;flex:1;min-height:0;flex-direction:column;gap:8px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding-bottom:2px}
-      .hourly-left::-webkit-scrollbar{display:none}
-      .hour-row{display:grid;grid-template-columns:54px 26px 48px minmax(58px,1fr) minmax(42px,max-content);align-items:center;gap:9px;flex:1 1 calc(100% / var(--ww-hourly-count,5));min-height:34px;max-height:54px;padding:5px 10px;border-radius:10px;background:var(--ww-panel);border:1px solid var(--ww-line)}
+      .hourly-left::-webkit-scrollbar{display:none}      .hour-row{display:grid;grid-template-columns:54px 26px 48px minmax(58px,1fr) minmax(42px,max-content);align-items:center;gap:9px;flex:1 1 calc(100% / var(--ww-hourly-count,5));min-height:34px;max-height:54px;padding:5px 10px;border-radius:10px;background:var(--ww-panel);border:1px solid var(--ww-line)}
       .hour-time-left{font-size:15px;color:var(--ww-muted);font-weight:850;text-transform:uppercase}
       .hour-icon-left{width:25px;height:25px;display:flex;align-items:center;justify-content:center}
       .hour-temp-left{font-size:16px;font-weight:900;color:var(--ww-text);text-align:right}
@@ -13387,8 +13442,7 @@ var RadarWiseCard = class extends HTMLElement {
       .card-grid.content-essentials{height:var(--radarwise-card-height,clamp(220px,16cqw,320px))}
       .card-grid.content-essentials .center{border-right:0}
       .card-grid.content-essentials .current-row{margin-bottom:10px}
-      @container(max-width:1500px){.card-grid{height:var(--radarwise-card-height,clamp(440px,25cqw,520px))}.left{padding:14px 18px 10px}.center{padding:16px 20px}.clock-time{font-size:70px}.clock-date{font-size:18px;margin-bottom:11px}.forecast-summary{margin-bottom:11px}.forecast-summary-text{font-size:12px}.section-title,.current-label{font-size:15px}.temp-now{font-size:58px}.temp-hilo{font-size:18px}.cond-name{font-size:32px}.updated-note{font-size:13px}.daily-strip{min-height:172px;max-height:212px}.fc-day{font-size:20px}.fc-period{font-size:13px}.fc-icon{width:58px;height:58px}.fc-icon svg{width:54px;height:54px}.fc-temp{font-size:43px}.hour-row{grid-template-columns:50px 24px 42px minmax(52px,1fr) minmax(38px,max-content);gap:7px;min-height:32px}.hour-time-left{font-size:14px}.hour-temp-left{font-size:15px}.hour-precip{font-size:11px}.stat{padding:9px 11px;gap:9px;min-height:62px}.stat-lbl{font-size:11px}.stat-val{font-size:17px}}
-      @container ww-center (max-width:680px){.current-row{gap:14px;min-height:74px}.current-icon{width:58px;height:58px}.cond-name{font-size:clamp(24px,8cqw,32px)}.updated-note{font-size:12px;margin-top:5px}.temp-now{font-size:clamp(42px,12cqw,58px)}.temp-hilo{font-size:16px;margin-top:5px}.daily-strip{grid-template-columns:repeat(var(--ww-forecast-count,5),minmax(92px,1fr));gap:8px;min-height:158px;max-height:196px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:none}.daily-strip::-webkit-scrollbar{display:none}.fc-slot{padding:8px 6px}.fc-day{font-size:18px}.fc-period{font-size:11px;min-height:12px}.fc-icon{width:48px;height:48px;margin:2px 0}.fc-icon svg{width:44px;height:44px}.fc-temp{font-size:34px}.fc-range,.fc-precip{font-size:10px;min-height:11px}.details-grid,.stats-row,.custom-sensors-row{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px}.custom-sensors-row{margin-top:8px}.stat{min-height:52px;padding:8px 9px;gap:8px}.stat-ico,.stat-ico svg,.stat-ico ha-icon{width:22px;height:22px}.stat-ico{flex-basis:22px}.stat-lbl{font-size:10px;margin-bottom:2px}.stat-val{font-size:clamp(13px,4.8cqw,16px)}}
+      @container(max-width:1500px){.card-grid{height:var(--radarwise-card-height,clamp(440px,25cqw,520px))}.left{padding:14px 18px 10px}.center{padding:16px 20px}.clock-time{font-size:70px}.clock-date{font-size:18px;margin-bottom:11px}.forecast-summary{margin-bottom:11px}.forecast-summary-text{font-size:12px}.section-title,.current-label{font-size:15px}.temp-now{font-size:58px}.temp-hilo{font-size:18px}.cond-name{font-size:32px}.updated-note{font-size:13px}.daily-strip{min-height:172px;max-height:212px}.fc-day{font-size:20px}.fc-period{font-size:13px}.fc-icon{width:58px;height:58px}.fc-icon svg{width:54px;height:54px}.fc-temp{font-size:43px}.hour-row{grid-template-columns:50px 24px 42px minmax(52px,1fr) minmax(38px,max-content);gap:7px;min-height:32px}.hour-time-left{font-size:14px}.hour-temp-left{font-size:15px}.hour-precip{font-size:11px}.stat{padding:9px 11px;gap:9px;min-height:62px}.stat-lbl{font-size:11px}.stat-val{font-size:17px}}      @container ww-center (max-width:680px){.current-row{gap:14px;min-height:74px}.current-icon{width:58px;height:58px}.cond-name{font-size:clamp(24px,8cqw,32px)}.updated-note{font-size:12px;margin-top:5px}.temp-now{font-size:clamp(42px,12cqw,58px)}.temp-hilo{font-size:16px;margin-top:5px}.daily-strip{grid-template-columns:repeat(var(--ww-forecast-count,5),minmax(92px,1fr));gap:8px;min-height:158px;max-height:196px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:none}.daily-strip::-webkit-scrollbar{display:none}.fc-slot{padding:8px 6px}.fc-day{font-size:18px}.fc-period{font-size:11px;min-height:12px}.fc-icon{width:48px;height:48px;margin:2px 0}.fc-icon svg{width:44px;height:44px}.fc-temp{font-size:34px}.fc-range,.fc-precip{font-size:10px;min-height:11px}.details-grid,.stats-row,.custom-sensors-row{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px}.custom-sensors-row{margin-top:8px}.stat{min-height:52px;padding:8px 9px;gap:8px}.stat-ico,.stat-ico svg,.stat-ico ha-icon{width:22px;height:22px}.stat-ico{flex-basis:22px}.stat-lbl{font-size:10px;margin-bottom:2px}.stat-val{font-size:clamp(13px,4.8cqw,16px)}}
       @container ww-center (max-width:480px){.daily-strip{grid-template-columns:repeat(var(--ww-forecast-count,5),minmax(86px,1fr));min-height:148px}.details-grid,.stats-row,.custom-sensors-row{grid-template-columns:repeat(2,minmax(0,1fr))}.stat-val{font-size:14px}.current-row{align-items:flex-start;flex-wrap:wrap}.temp-block{text-align:left}}
       @container(max-width:980px){.card-grid:not(.layout-wide_panel){height:var(--radarwise-card-height,clamp(560px,58cqw,680px))}.card-grid:not(.layout-wide_panel) .center{border-right:0}.card-grid:not(.layout-wide_panel) .right{grid-column:1 / -1;height:240px;border-top:1px solid rgba(255,255,255,0.28);border-radius:0 0 22px 22px}.card-grid:not(.layout-wide_panel) #rmap{height:240px}.card-grid:not(.layout-wide_panel) .daily-strip{min-height:150px;max-height:none}}
       .card-grid.layout-wide_panel{height:var(--radarwise-card-height,clamp(390px,22cqw,500px))}
@@ -13488,25 +13542,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
   _sensorOptions(sensors, selected) {
     return sensors.map(([entityId, state]) => {
       const name = state.attributes?.friendly_name || entityId;
-      return `<option value="${_wwEscape(entityId)}" ${selected === entityId ? "selected" : ""}>${_wwEscape(name)} (${_wwEscape(entityId)})</option>`;
-    }).join("");
-  }
-  _configuredSensorOption(entityId, sensors, predicate) {
-    if (!entityId || sensors.some(([candidate]) => candidate === entityId)) return "";
-    return predicate(entityId, this._hass?.states?.[entityId]) ? `<option value="${_wwEscape(entityId)}" selected>${_wwEscape(entityId)}</option>` : "";
-  }
-  _editorEntitySignature() {
-    const states = this._hass?.states || {};
-    return Object.entries(states).filter(([entityId, state]) => entityId.startsWith("weather.") || entityId.startsWith("sensor.") || entityId.startsWith("input_number.") || entityId.startsWith("number.") || isRadarWiseHumidityEntity(entityId, state) || isRadarWiseTemperatureEntity(entityId, state) || isRadarWiseDewPointEntity(entityId, state) || isRadarWiseWindSpeedEntity(entityId, state) || isRadarWiseWindDirectionEntity(entityId, state) || isRadarWiseAirQualityEntity(entityId, state) || isRadarWiseUvIndexEntity(entityId, state) || isRadarWisePollenEntity(entityId, state)).map(([entityId, state]) => `${entityId}:${state.attributes?.friendly_name || ""}:${state.attributes?.device_class || ""}`).sort().join("|");
-  }
-  _setValue(key, value) {
-    const numberKeys = ["latitude", "longitude", "hourly_count", "forecast_count", "card_height", "card_max_height", "radar_zoom", "radar_speed"];
-    const booleanKeys = ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "timeline_autoscroll"];
-    let nextValue = value;
-    if (numberKeys.includes(key)) nextValue = value === "" ? void 0 : Number(value);
-    if (booleanKeys.includes(key)) nextValue = Boolean(value);
-    const switchesToCustom = ["show_radar", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors"].includes(key);
-    const fullPresetDefaults = key === "content_mode" && nextValue === "full" ? { show_radar: true, show_timeline: true, show_forecast: true, show_forecast_summary: true, show_humidity: true, show_dew_point: true, show_wind: true, show_sunrise: true, show_sunset: true, show_environment: true, show_custom_sensors: true } : {};
+      return `<option value="${_wwEscape(entityId)}" ${selected === entityId ? "selected" : ""}>${_wwEscape(name)} (${_wwEscape(entityId)})</option>`;    const fullPresetDefaults = key === "content_mode" && nextValue === "full" ? { show_radar: true, show_timeline: true, show_forecast: true, show_forecast_summary: true, show_humidity: true, show_dew_point: true, show_wind: true, show_sunrise: true, show_sunset: true, show_environment: true, show_custom_sensors: true } : {};
     this._config = { ...this._config, ...fullPresetDefaults, ...switchesToCustom ? { content_mode: "custom" } : {}, [key]: nextValue };
     this.dispatchEvent(new CustomEvent("config-changed", {
       detail: { config: this._config },
@@ -13737,6 +13773,8 @@ var RadarWiseCardEditor = class extends HTMLElement {
             </label>
           </div>
           <label class="check" style="margin-top:10px"><input id="show_environment" type="checkbox" ${config.show_environment === false ? "" : "checked"}> Show AQI / pollen beside the clock</label>
+          <label class="check" style="margin-top:6px"><input id="show_moon" type="checkbox" ${config.show_moon === true ? "checked" : ""}> Show moon phase beside the clock</label>
+          <div class="hint">Adds a moon-phase disc and current moon age to that row, calculated locally (no entity needed) — works even with AQI/pollen turned off.</div>
           <div class="hint">Use Home Assistant sensors for fully entity-driven data, or Open-Meteo for no-key AQI, UV index, and pollen using the radar latitude/longitude. Open-Meteo does not provide mold; mold remains sensor-only.</div>
         </div>
         <div class="section">
@@ -13763,8 +13801,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
                     ${this._sensorOptions(customSensorEntities, selected)}
                   </select>
                 </label>
-                <div class="grid" style="margin-top:10px">
-                  <label>Label <input data-custom-sensor-index="${index}" data-custom-sensor-field="name" value="${_wwEscape(sensor?.name || "")}" placeholder="Auto name"></label>
+                <div class="grid" style="margin-top:10px">                  <label>Label <input data-custom-sensor-index="${index}" data-custom-sensor-field="name" value="${_wwEscape(sensor?.name || "")}" placeholder="Auto name"></label>
                   <label>Icon <input data-custom-sensor-index="${index}" data-custom-sensor-field="icon" value="${_wwEscape(sensor?.icon || "")}" placeholder="mdi:pool-thermometer"></label>
                   <label>Unit override <input data-custom-sensor-index="${index}" data-custom-sensor-field="unit" value="${_wwEscape(sensor?.unit || "")}" placeholder="Auto unit"></label>
                 </div>
@@ -13895,7 +13932,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
               <span class="layout-tile-name">Auto</span>
               <span class="layout-tile-desc">Adapts to screen</span>
             </button>
-            <button type="button" class="layout-tile${(config.layout || "auto") === "wide_panel" ? " selected" : ""}" data-layout="wide_panel" title="Optimised for wide screens \u2014 columns stay side-by-side">
+            <button type="button" class="layout-tile${(config.layout || "auto") === "wide_panel" ? " selected" : ""}" data-layout="wide_panel" title="Optimised for wide screens — columns stay side-by-side">
               <svg width="72" height="50" viewBox="0 0 72 50" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="1" y="1" width="70" height="48" rx="5" fill="var(--card-background-color,#f4f7f9)" stroke="var(--divider-color,#cdd5da)" stroke-width="1.5"/>
                 <rect x="4" y="4" width="14" height="42" rx="3" fill="var(--primary-color,#2a7a94)" opacity=".18"/>
@@ -13916,7 +13953,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
               <span class="layout-tile-name">Wide panel</span>
               <span class="layout-tile-desc">Always side-by-side</span>
             </button>
-            <button type="button" class="layout-tile${(config.layout || "auto") === "stacked" ? " selected" : ""}" data-layout="stacked" title="Sections stack vertically \u2014 good for narrow dashboards">
+            <button type="button" class="layout-tile${(config.layout || "auto") === "stacked" ? " selected" : ""}" data-layout="stacked" title="Sections stack vertically — good for narrow dashboards">
               <svg width="72" height="50" viewBox="0 0 72 50" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="1" y="1" width="70" height="48" rx="5" fill="var(--card-background-color,#f4f7f9)" stroke="var(--divider-color,#cdd5da)" stroke-width="1.5"/>
                 <rect x="4" y="4" width="64" height="13" rx="3" fill="var(--primary-color,#2a7a94)" opacity=".18"/>
@@ -13939,8 +13976,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
                 <rect x="4" y="4" width="18" height="22" rx="3" fill="var(--primary-color,#2a7a94)" opacity=".18"/>
                 <rect x="6" y="7" width="10" height="4" rx="1.5" fill="var(--primary-color,#2a7a94)" opacity=".7"/>
                 <rect x="6" y="13" width="14" height="2" rx="1" fill="var(--primary-color,#2a7a94)" opacity=".3"/>
-                <rect x="6" y="17" width="12" height="2" rx="1" fill="var(--primary-color,#2a7a94)" opacity=".2"/>
-                <rect x="6" y="21" width="14" height="2" rx="1" fill="var(--primary-color,#2a7a94)" opacity=".15"/>
+                <rect x="6" y="17" width="12" height="2" rx="1" fill="var(--primary-color,#2a7a94)" opacity=".15"/>
                 <rect x="24" y="4" width="44" height="22" rx="3" fill="var(--primary-color,#2a7a94)" opacity=".1"/>
                 <circle cx="34" cy="13" r="5" fill="var(--primary-color,#2a7a94)" opacity=".4"/>
                 <rect x="27" y="21" width="38" height="2" rx="1" fill="var(--primary-color,#2a7a94)" opacity=".2"/>
@@ -13949,8 +13985,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
               </svg>
               <span class="layout-tile-name">Radar bottom</span>
               <span class="layout-tile-desc">Wide radar below</span>
-            </button>
-            <button type="button" class="layout-tile${(config.layout || "auto") === "compact" ? " selected" : ""}" data-layout="compact" title="Shorter stacked layout \u2014 good for sidebar or mobile">
+            </button>            <button type="button" class="layout-tile${(config.layout || "auto") === "compact" ? " selected" : ""}" data-layout="compact" title="Shorter stacked layout — good for sidebar or mobile">
               <svg width="72" height="50" viewBox="0 0 72 50" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="1" y="1" width="70" height="48" rx="5" fill="var(--card-background-color,#f4f7f9)" stroke="var(--divider-color,#cdd5da)" stroke-width="1.5"/>
                 <rect x="4" y="4" width="64" height="10" rx="3" fill="var(--primary-color,#2a7a94)" opacity=".18"/>
@@ -13970,8 +14005,8 @@ var RadarWiseCardEditor = class extends HTMLElement {
               <span class="layout-tile-desc">Condensed, less tall</span>
             </button>
           </div>
-          <div class="hint" style="margin-top:10px">Auto is recommended for most dashboards \u2014 it switches between wide and stacked depending on how much space the card has.</div>
-          <div class="panel-order-label">Panel order \u2014 drag to rearrange</div>
+          <div class="hint" style="margin-top:10px">Auto is recommended for most dashboards — it switches between wide and stacked depending on how much space the card has.</div>
+          <div class="panel-order-label">Panel order — drag to rearrange</div>
           <div class="panel-order-list" id="panel-order-list">
             ${(config.panel_order || ["clock", "weather", "radar"]).map((key) => {
       const meta = {
@@ -13980,7 +14015,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
         radar: { name: "Radar Map", desc: "Live radar, warnings, playback controls", icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 12 L18 6" stroke="#2a7a94" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#2a7a94"/></svg>` }
       }[key] || { name: key, desc: "", icon: "" };
       return `<div class="panel-order-item" draggable="true" data-panel="${_wwEscape(key)}">
-                <span class="drag-handle" aria-hidden="true">\u283F</span>
+                <span class="drag-handle" aria-hidden="true">⠿</span>
                 <span class="panel-order-icon" style="color:var(--primary-color,#2a7a94)">${meta.icon}</span>
                 <div><div class="panel-order-name">${_wwEscape(meta.name)}</div><div class="panel-order-desc">${_wwEscape(meta.desc)}</div></div>
               </div>`;
@@ -13993,7 +14028,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
       return `<div class="col-width-row">
                 <span class="col-width-name">${_wwEscape(names[key] || key)}</span>
                 <div style="display:flex;align-items:center;gap:4px">
-                  <button type="button" class="col-width-step" data-idx="${i}" data-dir="-1" style="width:28px;height:28px;border:1px solid var(--divider-color,rgba(0,0,0,.15));border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font-size:16px;cursor:pointer;line-height:1;padding:0">\u2212</button>
+                  <button type="button" class="col-width-step" data-idx="${i}" data-dir="-1" style="width:28px;height:28px;border:1px solid var(--divider-color,rgba(0,0,0,.15));border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font-size:16px;cursor:pointer;line-height:1;padding:0">−</button>
                   <span id="col_width_val_${i}" style="min-width:42px;text-align:center;font-size:15px;font-weight:700;color:var(--primary-text-color,#0a1e28)">${w}%</span>
                   <button type="button" class="col-width-step" data-idx="${i}" data-dir="1" style="width:28px;height:28px;border:1px solid var(--divider-color,rgba(0,0,0,.15));border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font-size:16px;cursor:pointer;line-height:1;padding:0">+</button>
                 </div>
@@ -14002,7 +14037,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
             ${(() => {
       const tot = (config.column_widths || [25, 50, 25]).reduce((a, b) => a + b, 0);
       const ok = tot === 100;
-      return `<div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:${ok ? "normal" : "700"};color:${ok ? "var(--secondary-text-color,#536b75)" : "var(--error-color,#c0392b)"}">Total: ${tot}%${ok ? "" : " \u2014 must equal 100%"}</span><button type="button" id="col_width_reset" style="font-size:12px;padding:4px 10px;border:1px solid var(--divider-color,rgba(0,0,0,.15));border-radius:6px;background:var(--card-background-color,#fff);color:var(--secondary-text-color,#536b75);cursor:pointer">Reset widths</button></div>`;
+      return `<div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:${ok ? "normal" : "700"};color:${ok ? "var(--secondary-text-color,#536b75)" : "var(--error-color,#c0392b)"}">Total: ${tot}%${ok ? "" : " — must equal 100%"}</span><button type="button" id="col_width_reset" style="font-size:12px;padding:4px 10px;border:1px solid var(--divider-color,rgba(0,0,0,.15));border-radius:6px;background:var(--card-background-color,#fff);color:var(--secondary-text-color,#536b75);cursor:pointer">Reset widths</button></div>`;
     })()}
           </div>
           <div style="margin-top:14px">
@@ -14046,7 +14081,7 @@ var RadarWiseCardEditor = class extends HTMLElement {
     ["entity", "temperature_entity", "humidity_entity", "dew_point_entity", "wind_speed_entity", "wind_direction_entity", "air_quality_entity", "uv_index_entity", "pollen_entity", "tree_pollen_entity", "grass_pollen_entity", "weed_pollen_entity", "mold_pollen_entity", "environment_source", "country", "radar_provider", "radar_style", "radar_basemap", "radar_timeline", "title", "units", "theme_mode", "language", "time_format", "time_zone_mode", "time_zone", "font_family", "density", "latitude", "longitude", "hourly_count", "forecast_count", "forecast_mode", "card_height", "card_max_height", "radar_zoom", "radar_speed"].forEach((id) => {
       this.shadowRoot.getElementById(id)?.addEventListener("change", (event) => this._setValue(id, event.target.value));
     });
-    ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "timeline_autoscroll"].forEach((id) => {
+    ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "show_moon", "timeline_autoscroll"].forEach((id) => {
       this.shadowRoot.getElementById(id)?.addEventListener("change", (event) => this._setValue(id, event.target.checked));
     });
     this.shadowRoot.querySelectorAll("[data-custom-sensor-index][data-custom-sensor-field]").forEach((input) => {
@@ -14156,3 +14191,20 @@ console.info(
   "background:#0d3a5c;color:#7ecbca;font-weight:bold;padding:2px 4px;border-radius:3px 0 0 3px",
   "background:#7ecbca;color:#0d3a5c;font-weight:bold;padding:2px 4px;border-radius:0 3px 3px 0"
 );
+    }).join("");
+  }
+  _configuredSensorOption(entityId, sensors, predicate) {
+    if (!entityId || sensors.some(([candidate]) => candidate === entityId)) return "";
+    return predicate(entityId, this._hass?.states?.[entityId]) ? `<option value="${_wwEscape(entityId)}" selected>${_wwEscape(entityId)}</option>` : "";
+  }
+  _editorEntitySignature() {
+    const states = this._hass?.states || {};
+    return Object.entries(states).filter(([entityId, state]) => entityId.startsWith("weather.") || entityId.startsWith("sensor.") || entityId.startsWith("input_number.") || entityId.startsWith("number.") || isRadarWiseHumidityEntity(entityId, state) || isRadarWiseTemperatureEntity(entityId, state) || isRadarWiseDewPointEntity(entityId, state) || isRadarWiseWindSpeedEntity(entityId, state) || isRadarWiseWindDirectionEntity(entityId, state) || isRadarWiseAirQualityEntity(entityId, state) || isRadarWiseUvIndexEntity(entityId, state) || isRadarWisePollenEntity(entityId, state)).map(([entityId, state]) => `${entityId}:${state.attributes?.friendly_name || ""}:${state.attributes?.device_class || ""}`).sort().join("|");
+  }
+  _setValue(key, value) {
+    const numberKeys = ["latitude", "longitude", "hourly_count", "forecast_count", "card_height", "card_max_height", "radar_zoom", "radar_speed"];
+    const booleanKeys = ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "show_moon", "timeline_autoscroll"];
+    let nextValue = value;
+    if (numberKeys.includes(key)) nextValue = value === "" ? void 0 : Number(value);
+    if (booleanKeys.includes(key)) nextValue = Boolean(value);
+    const switchesToCustom = ["show_radar", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors"].includes(key);
