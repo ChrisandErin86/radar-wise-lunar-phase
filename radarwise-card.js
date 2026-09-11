@@ -13542,7 +13542,24 @@ var RadarWiseCardEditor = class extends HTMLElement {
   _sensorOptions(sensors, selected) {
     return sensors.map(([entityId, state]) => {
       const name = state.attributes?.friendly_name || entityId;
-      return `<option value="${_wwEscape(entityId)}" ${selected === entityId ? "selected" : ""}>${_wwEscape(name)} (${_wwEscape(entityId)})</option>`;    const fullPresetDefaults = key === "content_mode" && nextValue === "full" ? { show_radar: true, show_timeline: true, show_forecast: true, show_forecast_summary: true, show_humidity: true, show_dew_point: true, show_wind: true, show_sunrise: true, show_sunset: true, show_environment: true, show_custom_sensors: true } : {};
+      return `<option value="${_wwEscape(entityId)}" ${selected === entityId ? "selected" : ""}>${_wwEscape(name)} (${_wwEscape(entityId)})</option>`;}).join("");
+  }
+  _configuredSensorOption(entityId, sensors, predicate) {
+    if (!entityId || sensors.some(([candidate]) => candidate === entityId)) return "";
+    return predicate(entityId, this._hass?.states?.[entityId]) ? `<option value="${_wwEscape(entityId)}" selected>${_wwEscape(entityId)}</option>` : "";
+  }
+  _editorEntitySignature() {
+    const states = this._hass?.states || {};
+    return Object.entries(states).filter(([entityId, state]) => entityId.startsWith("weather.") || entityId.startsWith("sensor.") || entityId.startsWith("input_number.") || entityId.startsWith("number.") || isRadarWiseHumidityEntity(entityId, state) || isRadarWiseTemperatureEntity(entityId, state) || isRadarWiseDewPointEntity(entityId, state) || isRadarWiseWindSpeedEntity(entityId, state) || isRadarWiseWindDirectionEntity(entityId, state) || isRadarWiseAirQualityEntity(entityId, state) || isRadarWiseUvIndexEntity(entityId, state) || isRadarWisePollenEntity(entityId, state)).map(([entityId, state]) => `${entityId}:${state.attributes?.friendly_name || ""}:${state.attributes?.device_class || ""}`).sort().join("|");
+  }
+  _setValue(key, value) {
+    const numberKeys = ["latitude", "longitude", "hourly_count", "forecast_count", "card_height", "card_max_height", "radar_zoom", "radar_speed"];
+    const booleanKeys = ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "show_moon", "timeline_autoscroll"];
+    let nextValue = value;
+    if (numberKeys.includes(key)) nextValue = value === "" ? void 0 : Number(value);
+    if (booleanKeys.includes(key)) nextValue = Boolean(value);
+    const switchesToCustom = ["show_radar", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors"].includes(key);
+    const fullPresetDefaults = key === "content_mode" && nextValue === "full" ? { show_radar: true, show_timeline: true, show_forecast: true, show_forecast_summary: true, show_humidity: true, show_dew_point: true, show_wind: true, show_sunrise: true, show_sunset: true, show_environment: true, show_custom_sensors: true } : {};
     this._config = { ...this._config, ...fullPresetDefaults, ...switchesToCustom ? { content_mode: "custom" } : {}, [key]: nextValue };
     this.dispatchEvent(new CustomEvent("config-changed", {
       detail: { config: this._config },
@@ -14191,20 +14208,4 @@ console.info(
   "background:#0d3a5c;color:#7ecbca;font-weight:bold;padding:2px 4px;border-radius:3px 0 0 3px",
   "background:#7ecbca;color:#0d3a5c;font-weight:bold;padding:2px 4px;border-radius:0 3px 3px 0"
 );
-    }).join("");
-  }
-  _configuredSensorOption(entityId, sensors, predicate) {
-    if (!entityId || sensors.some(([candidate]) => candidate === entityId)) return "";
-    return predicate(entityId, this._hass?.states?.[entityId]) ? `<option value="${_wwEscape(entityId)}" selected>${_wwEscape(entityId)}</option>` : "";
-  }
-  _editorEntitySignature() {
-    const states = this._hass?.states || {};
-    return Object.entries(states).filter(([entityId, state]) => entityId.startsWith("weather.") || entityId.startsWith("sensor.") || entityId.startsWith("input_number.") || entityId.startsWith("number.") || isRadarWiseHumidityEntity(entityId, state) || isRadarWiseTemperatureEntity(entityId, state) || isRadarWiseDewPointEntity(entityId, state) || isRadarWiseWindSpeedEntity(entityId, state) || isRadarWiseWindDirectionEntity(entityId, state) || isRadarWiseAirQualityEntity(entityId, state) || isRadarWiseUvIndexEntity(entityId, state) || isRadarWisePollenEntity(entityId, state)).map(([entityId, state]) => `${entityId}:${state.attributes?.friendly_name || ""}:${state.attributes?.device_class || ""}`).sort().join("|");
-  }
-  _setValue(key, value) {
-    const numberKeys = ["latitude", "longitude", "hourly_count", "forecast_count", "card_height", "card_max_height", "radar_zoom", "radar_speed"];
-    const booleanKeys = ["show_radar", "show_map_controls", "radar_controls", "show_warning_overlay", "show_animations", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors", "show_moon", "timeline_autoscroll"];
-    let nextValue = value;
-    if (numberKeys.includes(key)) nextValue = value === "" ? void 0 : Number(value);
-    if (booleanKeys.includes(key)) nextValue = Boolean(value);
-    const switchesToCustom = ["show_radar", "show_timeline", "show_forecast", "show_forecast_summary", "show_humidity", "show_dew_point", "show_wind", "show_sunrise", "show_sunset", "show_environment", "show_custom_sensors"].includes(key);
+    
