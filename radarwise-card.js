@@ -11762,7 +11762,7 @@ var RadarWiseCard = class extends HTMLElement {
   _renderEnvironmentTiles() {
     const envBlocked = this._config.show_environment === false || this._config.environment_source === "disabled";
     const tiles = [
-      ...envBlocked || this._config.show_air_quality === false ? [] : [this._airQualityTile()]), ...(envBlocked || this._config.show_pollen === false ? [] : [this._pollenTile()]),
+      ...(envBlocked || this._config.show_air_quality === false ? [] : [this._airQualityTile()]), ...(envBlocked || this._config.show_pollen === false ? [] : [this._pollenTile()]),
       this._moonTile()
     ].filter(Boolean);
     if (!tiles.length) return "";
